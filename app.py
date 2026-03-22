@@ -264,7 +264,7 @@ def nueva_entrada():
                 'id': len(mock_historial) + 1,
                 'reparacion_id': nueva_rep['id'],
                 'estado': 'Recibido',
-                'tecnico': 'Técnico',
+                'tecnico': session.get('user_nombre', 'Técnico'),
                 'fecha': datetime.now()
             })
 
@@ -300,7 +300,7 @@ def nueva_entrada():
         reparacion_id = cursor.lastrowid
 
         # Insertar primer estado
-        cursor.execute("INSERT INTO historial_estados (reparacion_id, estado, tecnico) VALUES (%s, 'Recibido', 'Técnico')", (reparacion_id,))
+        cursor.execute("INSERT INTO historial_estados (reparacion_id, estado, tecnico) VALUES (%s, 'Recibido', %s)", (reparacion_id, session.get('user_nombre', 'Técnico')))
         db.commit()
         cursor.close()
         db.close()
@@ -439,7 +439,7 @@ def cambiar_estado(codigo):
                 'id': len(mock_historial) + 1,
                 'reparacion_id': rep['id'],
                 'estado': nuevo_estado,
-                'tecnico': 'Técnico',
+                'tecnico': session.get('user_nombre', 'Técnico'),
                 'fecha': datetime.now()
             })
             flash(f'Estado cambiado a "{nuevo_estado}".', 'success')
@@ -461,7 +461,7 @@ def cambiar_estado(codigo):
         elif nuevo_estado == 'Entregado' and rep.get('presupuesto') and not rep.get('presupuesto_aceptado'):
             cursor.execute("UPDATE reparaciones SET presupuesto_aceptado = FALSE WHERE codigo = %s", (codigo,))
 
-        cursor.execute("INSERT INTO historial_estados (reparacion_id, estado, tecnico) VALUES (%s, %s, 'Técnico')", (rep['id'], nuevo_estado))
+        cursor.execute("INSERT INTO historial_estados (reparacion_id, estado, tecnico) VALUES (%s, %s, %s)", (rep['id'], nuevo_estado, session.get('user_nombre', 'Técnico')))
         db.commit()
         flash(f'Estado cambiado a "{nuevo_estado}".', 'success')
     else:
@@ -487,7 +487,7 @@ def enviar_presupuesto(codigo):
                 'id': len(mock_historial) + 1,
                 'reparacion_id': rep['id'],
                 'estado': 'Presupuesto enviado',
-                'tecnico': 'Técnico',
+                'tecnico': session.get('user_nombre', 'Técnico'),
                 'fecha': datetime.now()
             })
             flash(f'Presupuesto de {presupuesto}€ enviado.', 'success')
@@ -500,7 +500,7 @@ def enviar_presupuesto(codigo):
 
     if rep and rep['estado'] == 'Diagnosticado':
         cursor.execute("UPDATE reparaciones SET presupuesto = %s, estado = 'Presupuesto enviado' WHERE codigo = %s", (presupuesto, codigo))
-        cursor.execute("INSERT INTO historial_estados (reparacion_id, estado, tecnico) VALUES (%s, 'Presupuesto enviado', 'Técnico')", (rep['id'],))
+        cursor.execute("INSERT INTO historial_estados (reparacion_id, estado, tecnico) VALUES (%s, 'Presupuesto enviado', %s)", (rep['id'], session.get('user_nombre', 'Técnico')))
         db.commit()
         flash(f'Presupuesto de {presupuesto}€ enviado.', 'success')
 
@@ -529,6 +529,95 @@ def precio_final(codigo):
     db.close()
     flash(f'Precio final: {precio}€.', 'success')
     return redirect(url_for('detalle_reparacion', codigo=codigo))
+
+
+@app.route('/reparacion/<codigo>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_reparacion(codigo):
+    if PREVIEW_MODE:
+        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        if not rep:
+            flash('Reparación no encontrada.', 'error')
+            return redirect(url_for('reparaciones'))
+
+        if request.method == 'POST':
+            rep['tipo_dispositivo'] = request.form.get('tipo_dispositivo', '').strip() or rep['tipo_dispositivo']
+            rep['marca'] = request.form.get('marca', '').strip()
+            rep['modelo'] = request.form.get('modelo', '').strip()
+            rep['averia'] = request.form.get('averia', '').strip() or rep['averia']
+            rep['observaciones'] = request.form.get('observaciones', '').strip()
+            rep['updated_at'] = datetime.now()
+            flash('Reparación actualizada.', 'success')
+            return redirect(url_for('detalle_reparacion', codigo=codigo))
+
+        return render_template('editar_reparacion.html', rep=rep)
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM reparaciones WHERE codigo = %s", (codigo,))
+    rep = cursor.fetchone()
+
+    if not rep:
+        cursor.close()
+        db.close()
+        flash('Reparación no encontrada.', 'error')
+        return redirect(url_for('reparaciones'))
+
+    if request.method == 'POST':
+        tipo = request.form.get('tipo_dispositivo', '').strip() or rep['tipo_dispositivo']
+        marca = request.form.get('marca', '').strip()
+        modelo = request.form.get('modelo', '').strip()
+        averia = request.form.get('averia', '').strip() or rep['averia']
+        observaciones = request.form.get('observaciones', '').strip()
+
+        cursor.execute("""
+            UPDATE reparaciones SET tipo_dispositivo=%s, marca=%s, modelo=%s,
+            averia=%s, observaciones=%s WHERE codigo=%s
+        """, (tipo, marca, modelo, averia, observaciones, codigo))
+        db.commit()
+        cursor.close()
+        db.close()
+        flash('Reparación actualizada.', 'success')
+        return redirect(url_for('detalle_reparacion', codigo=codigo))
+
+    cursor.close()
+    db.close()
+    return render_template('editar_reparacion.html', rep=rep)
+
+
+@app.route('/reparacion/<codigo>/eliminar', methods=['POST'])
+@login_required
+def eliminar_reparacion(codigo):
+    if PREVIEW_MODE:
+        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        if not rep:
+            flash('Reparación no encontrada.', 'error')
+            return redirect(url_for('reparaciones'))
+
+        # Eliminar historial asociado
+        mock_historial[:] = [h for h in mock_historial if h['reparacion_id'] != rep['id']]
+        mock_reparaciones.remove(rep)
+        flash(f'Reparación {codigo} eliminada.', 'success')
+        return redirect(url_for('reparaciones'))
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT id FROM reparaciones WHERE codigo = %s", (codigo,))
+    rep = cursor.fetchone()
+
+    if not rep:
+        cursor.close()
+        db.close()
+        flash('Reparación no encontrada.', 'error')
+        return redirect(url_for('reparaciones'))
+
+    cursor.execute("DELETE FROM historial_estados WHERE reparacion_id = %s", (rep['id'],))
+    cursor.execute("DELETE FROM reparaciones WHERE id = %s", (rep['id'],))
+    db.commit()
+    cursor.close()
+    db.close()
+    flash(f'Reparación {codigo} eliminada.', 'success')
+    return redirect(url_for('reparaciones'))
 
 
 @app.route('/clientes')

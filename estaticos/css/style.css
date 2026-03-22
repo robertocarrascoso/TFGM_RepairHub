@@ -533,6 +533,43 @@ textarea {
     font-weight: 600;
 }
 
+.btn-danger {
+    background-color: var(--danger);
+    color: #FFFFFF;
+}
+
+.btn-danger:hover {
+    opacity: 0.9;
+}
+
+/* Acciones en detalle de reparación */
+.acciones-reparacion {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1.5rem 0;
+}
+
+/* Formulario inline de cambio de estado */
+.form-estado-inline {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.form-estado-inline .form-group {
+    margin-bottom: 0;
+    min-width: 200px;
+}
+
+/* Acciones de formulario (botones guardar/cancelar) */
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
 /* ========================================
    FILTROS (reparaciones)
    ======================================== */
