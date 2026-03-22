@@ -1079,3 +1079,91 @@ h1 + .badge {
         grid-template-columns: 1fr;
     }
 }
+
+/* ========================================
+   PAGINACIÓN
+   ======================================== */
+
+.paginacion {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+}
+
+.paginacion-info {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ========================================
+   FILTROS AVANZADOS
+   ======================================== */
+
+.filtros-avanzados {
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+}
+
+.filtros-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.filtros-form .form-group {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 140px;
+}
+
+.filtros-form .form-group label {
+    font-size: 0.7rem;
+    margin-bottom: 0.25rem;
+}
+
+.filtros-form .form-group input,
+.filtros-form .form-group select {
+    padding: 0.5rem 0.7rem;
+    font-size: 0.85rem;
+}
+
+.filtros-form-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+    padding-bottom: 1px;
+}
+
+/* Texto muted en headers */
+.text-muted {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.85em;
+}
+
+@media (max-width: 768px) {
+    .filtros-form {
+        flex-direction: column;
+    }
+
+    .filtros-form .form-group {
+        min-width: 100%;
+    }
+
+    .filtros-form-actions {
+        width: 100%;
+    }
+
+    .filtros-form-actions .btn {
+        flex: 1;
+    }
+
+    .paginacion {
+        flex-wrap: wrap;
+    }
+}

@@ -2,7 +2,9 @@
 {% block title %}Clientes — RepairHub{% endblock %}
 
 {% block content %}
-<h1>Clientes</h1>
+<div class="page-header">
+    <h1>Clientes <span class="text-muted">({{ total }})</span></h1>
+</div>
 
 <div class="table-responsive">
     <table>
@@ -28,4 +30,18 @@
         </tbody>
     </table>
 </div>
+
+{% if total_pages > 1 %}
+<nav class="paginacion">
+    {% if page > 1 %}
+    <a href="{{ url_for('clientes', page=page-1) }}" class="btn btn-secondary btn-sm">&laquo; Anterior</a>
+    {% endif %}
+
+    <span class="paginacion-info">Página {{ page }} de {{ total_pages }}</span>
+
+    {% if page < total_pages %}
+    <a href="{{ url_for('clientes', page=page+1) }}" class="btn btn-secondary btn-sm">Siguiente &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}
 {% endblock %}

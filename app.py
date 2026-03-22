@@ -1,9 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from config import DB_CONFIG, SECRET_KEY
 from utilidades.pdf_generator import generar_pdf
 from datetime import datetime
+import csv
+import io
 import os
 
 app = Flask(__name__,
@@ -327,46 +329,136 @@ def nueva_entrada():
 
     return render_template('nueva_entrada.html')
 
+PER_PAGE = 20
+
+
+def _filtrar_reparaciones_mock(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre):
+    """Aplica filtros sobre los datos mock de reparaciones."""
+    lista = list(mock_reparaciones)
+
+    if filtro != 'todos':
+        lista = [r for r in lista if r['estado'] == filtro]
+    if fecha_desde:
+        lista = [r for r in lista if r['created_at'].date() >= fecha_desde]
+    if fecha_hasta:
+        lista = [r for r in lista if r['created_at'].date() <= fecha_hasta]
+    if tipo_dispositivo:
+        lista = [r for r in lista if r['tipo_dispositivo'] == tipo_dispositivo]
+    if cliente_nombre:
+        for r in lista:
+            c = next((c for c in mock_clientes if c['id'] == r['cliente_id']), None)
+            r['_nombre_cliente'] = c['nombre'] if c else ''
+        lista = [r for r in lista if cliente_nombre.lower() in r.get('_nombre_cliente', '').lower()]
+
+    # Añadir nombre del cliente
+    for rep in lista:
+        c = next((c for c in mock_clientes if c['id'] == rep['cliente_id']), None)
+        rep['cliente_nombre'] = c['nombre'] if c else 'Desconocido'
+
+    lista = sorted(lista, key=lambda r: r['created_at'], reverse=True)
+    return lista
+
+
+def _get_filtros_from_request():
+    """Extrae los parámetros de filtro de la petición."""
+    from datetime import date
+    filtro = request.args.get('estado', 'todos')
+    fecha_desde_str = request.args.get('fecha_desde', '')
+    fecha_hasta_str = request.args.get('fecha_hasta', '')
+    tipo_dispositivo = request.args.get('tipo_dispositivo', '')
+    cliente_nombre = request.args.get('cliente', '')
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
+
+    fecha_desde = None
+    fecha_hasta = None
+    if fecha_desde_str:
+        try:
+            fecha_desde = date.fromisoformat(fecha_desde_str)
+        except ValueError:
+            pass
+    if fecha_hasta_str:
+        try:
+            fecha_hasta = date.fromisoformat(fecha_hasta_str)
+        except ValueError:
+            pass
+
+    return filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre, page, fecha_desde_str, fecha_hasta_str
+
+
 @app.route('/reparaciones')
 @login_required
 def reparaciones():
-    filtro = request.args.get('estado', 'todos')
+    filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre, page, fecha_desde_str, fecha_hasta_str = _get_filtros_from_request()
 
     if PREVIEW_MODE:
-        if filtro == 'todos':
-            lista = mock_reparaciones
-        else:
-            lista = [r for r in mock_reparaciones if r['estado'] == filtro]
+        lista = _filtrar_reparaciones_mock(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre)
+        total = len(lista)
+        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+        page = min(page, total_pages)
+        lista_paginada = lista[(page - 1) * PER_PAGE: page * PER_PAGE]
 
-        # Añadir nombre del cliente
-        for rep in lista:
-            cliente = next((c for c in mock_clientes if c['id'] == rep['cliente_id']), None)
-            rep['cliente_nombre'] = cliente['nombre'] if cliente else 'Desconocido'
-
-        lista = sorted(lista, key=lambda r: r['created_at'], reverse=True)
-        return render_template('reparaciones.html', reparaciones=lista, filtro_actual=filtro)
+        tipos = sorted(set(r['tipo_dispositivo'] for r in mock_reparaciones))
+        return render_template('reparaciones.html',
+            reparaciones=lista_paginada, filtro_actual=filtro,
+            page=page, total_pages=total_pages, total=total,
+            fecha_desde=fecha_desde_str, fecha_hasta=fecha_hasta_str,
+            tipo_dispositivo=tipo_dispositivo, cliente=cliente_nombre,
+            tipos_dispositivo=tipos)
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
-    if filtro == 'todos':
-        cursor.execute("""
-            SELECT r.*, c.nombre as cliente_nombre
-            FROM reparaciones r JOIN clientes c ON r.cliente_id = c.id
-            ORDER BY r.created_at DESC
-        """)
-    else:
-        cursor.execute("""
-            SELECT r.*, c.nombre as cliente_nombre
-            FROM reparaciones r JOIN clientes c ON r.cliente_id = c.id
-            WHERE r.estado = %s
-            ORDER BY r.created_at DESC
-        """, (filtro,))
+    # Construir query con filtros
+    where = []
+    params = []
+    if filtro != 'todos':
+        where.append("r.estado = %s")
+        params.append(filtro)
+    if fecha_desde:
+        where.append("DATE(r.created_at) >= %s")
+        params.append(fecha_desde)
+    if fecha_hasta:
+        where.append("DATE(r.created_at) <= %s")
+        params.append(fecha_hasta)
+    if tipo_dispositivo:
+        where.append("r.tipo_dispositivo = %s")
+        params.append(tipo_dispositivo)
+    if cliente_nombre:
+        where.append("c.nombre LIKE %s")
+        params.append(f'%{cliente_nombre}%')
 
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+    # Total para paginación
+    cursor.execute(f"SELECT COUNT(*) as total FROM reparaciones r JOIN clientes c ON r.cliente_id = c.id{where_sql}", params)
+    total = cursor.fetchone()['total']
+    total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+    page = min(page, total_pages)
+    offset = (page - 1) * PER_PAGE
+
+    cursor.execute(f"""
+        SELECT r.*, c.nombre as cliente_nombre
+        FROM reparaciones r JOIN clientes c ON r.cliente_id = c.id
+        {where_sql}
+        ORDER BY r.created_at DESC
+        LIMIT %s OFFSET %s
+    """, params + [PER_PAGE, offset])
     lista = cursor.fetchall()
+
+    # Tipos de dispositivo para el select de filtro
+    cursor.execute("SELECT DISTINCT tipo_dispositivo FROM reparaciones ORDER BY tipo_dispositivo")
+    tipos = [row['tipo_dispositivo'] for row in cursor.fetchall()]
+
     cursor.close()
     db.close()
-    return render_template('reparaciones.html', reparaciones=lista, filtro_actual=filtro)
+    return render_template('reparaciones.html',
+        reparaciones=lista, filtro_actual=filtro,
+        page=page, total_pages=total_pages, total=total,
+        fecha_desde=fecha_desde_str, fecha_hasta=fecha_hasta_str,
+        tipo_dispositivo=tipo_dispositivo, cliente=cliente_nombre,
+        tipos_dispositivo=tipos)
 
 # Flujo de estados válidos
 FLUJO_ESTADOS = {
@@ -641,26 +733,44 @@ def eliminar_reparacion(codigo):
 @app.route('/clientes')
 @login_required
 def clientes():
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
+
     if PREVIEW_MODE:
         lista = []
         for c in mock_clientes:
             n_reps = len([r for r in mock_reparaciones if r['cliente_id'] == c['id']])
             lista.append({**c, 'n_reparaciones': n_reps})
-        return render_template('clientes.html', clientes=lista)
+        total = len(lista)
+        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+        page = min(page, total_pages)
+        lista_paginada = lista[(page - 1) * PER_PAGE: page * PER_PAGE]
+        return render_template('clientes.html', clientes=lista_paginada,
+            page=page, total_pages=total_pages, total=total)
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
+
+    cursor.execute("SELECT COUNT(*) as total FROM clientes")
+    total = cursor.fetchone()['total']
+    total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+    page = min(page, total_pages)
+    offset = (page - 1) * PER_PAGE
+
     cursor.execute("""
         SELECT c.*, COUNT(r.id) as n_reparaciones
         FROM clientes c
         LEFT JOIN reparaciones r ON c.id = r.cliente_id
         GROUP BY c.id
         ORDER BY c.nombre
-    """)
+        LIMIT %s OFFSET %s
+    """, (PER_PAGE, offset))
     lista = cursor.fetchall()
     cursor.close()
     db.close()
-    return render_template('clientes.html', clientes=lista)
+    return render_template('clientes.html', clientes=lista,
+        page=page, total_pages=total_pages, total=total)
 
 @app.route('/cliente/<int:id>')
 @login_required
@@ -903,6 +1013,75 @@ def ver_pdf(codigo):
     generar_pdf(datos, pdf_path)
 
     return send_file(pdf_path, as_attachment=False, download_name=f'{codigo}.pdf')
+
+
+@app.route('/reparaciones/csv')
+@login_required
+def exportar_csv():
+    filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre, _, fecha_desde_str, fecha_hasta_str = _get_filtros_from_request()
+
+    if PREVIEW_MODE:
+        lista = _filtrar_reparaciones_mock(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre)
+    else:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        where = []
+        params = []
+        if filtro != 'todos':
+            where.append("r.estado = %s")
+            params.append(filtro)
+        if fecha_desde:
+            where.append("DATE(r.created_at) >= %s")
+            params.append(fecha_desde)
+        if fecha_hasta:
+            where.append("DATE(r.created_at) <= %s")
+            params.append(fecha_hasta)
+        if tipo_dispositivo:
+            where.append("r.tipo_dispositivo = %s")
+            params.append(tipo_dispositivo)
+        if cliente_nombre:
+            where.append("c.nombre LIKE %s")
+            params.append(f'%{cliente_nombre}%')
+
+        where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+        cursor.execute(f"""
+            SELECT r.*, c.nombre as cliente_nombre
+            FROM reparaciones r JOIN clientes c ON r.cliente_id = c.id
+            {where_sql}
+            ORDER BY r.created_at DESC
+        """, params)
+        lista = cursor.fetchall()
+        cursor.close()
+        db.close()
+
+    output = io.StringIO()
+    output.write('\ufeff')  # BOM para Excel
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow(['Código', 'Cliente', 'Tipo dispositivo', 'Marca', 'Modelo', 'Avería', 'Estado', 'Presupuesto', 'Precio final', 'Fecha entrada'])
+
+    for r in lista:
+        fecha = r['created_at'].strftime('%d/%m/%Y') if isinstance(r['created_at'], datetime) else str(r['created_at'])
+        writer.writerow([
+            r['codigo'],
+            r.get('cliente_nombre', ''),
+            r['tipo_dispositivo'],
+            r.get('marca', ''),
+            r.get('modelo', ''),
+            r['averia'],
+            r['estado'],
+            r.get('presupuesto') or '',
+            r.get('precio_final') or '',
+            fecha
+        ])
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': 'attachment; filename=reparaciones.csv'}
+    )
 
 
 # --- Panel de administración ---
