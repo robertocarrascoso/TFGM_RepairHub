@@ -683,6 +683,69 @@ def detalle_cliente(id):
     return render_template('cliente.html', cliente=cliente, reparaciones=reps, gasto_total=gasto)
 
 
+@app.route('/cliente/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_cliente(id):
+    if PREVIEW_MODE:
+        cliente = next((c for c in mock_clientes if c['id'] == id), None)
+        if not cliente:
+            flash('Cliente no encontrado.', 'error')
+            return redirect(url_for('clientes'))
+
+        if request.method == 'POST':
+            nombre = request.form.get('nombre', '').strip()
+            telefono = request.form.get('telefono', '').strip()
+            email = request.form.get('email', '').strip()
+
+            if not nombre:
+                flash('El nombre es obligatorio.', 'error')
+                return render_template('editar_cliente.html', cliente=cliente)
+
+            cliente['nombre'] = nombre
+            cliente['telefono'] = telefono
+            cliente['email'] = email
+            flash('Cliente actualizado correctamente.', 'success')
+            return redirect(url_for('detalle_cliente', id=id))
+
+        return render_template('editar_cliente.html', cliente=cliente)
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM clientes WHERE id = %s", (id,))
+    cliente = cursor.fetchone()
+
+    if not cliente:
+        cursor.close()
+        db.close()
+        flash('Cliente no encontrado.', 'error')
+        return redirect(url_for('clientes'))
+
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        telefono = request.form.get('telefono', '').strip()
+        email = request.form.get('email', '').strip()
+
+        if not nombre:
+            flash('El nombre es obligatorio.', 'error')
+            cursor.close()
+            db.close()
+            return render_template('editar_cliente.html', cliente=cliente)
+
+        cursor.execute(
+            "UPDATE clientes SET nombre = %s, telefono = %s, email = %s WHERE id = %s",
+            (nombre, telefono, email, id)
+        )
+        db.commit()
+        cursor.close()
+        db.close()
+        flash('Cliente actualizado correctamente.', 'success')
+        return redirect(url_for('detalle_cliente', id=id))
+
+    cursor.close()
+    db.close()
+    return render_template('editar_cliente.html', cliente=cliente)
+
+
 @app.route('/buscar')
 @login_required
 def buscar():
