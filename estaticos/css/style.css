@@ -969,10 +969,59 @@ h1 + .badge {
     border-radius: 6px;
 }
 
+/* Badge contador en navbar */
+.nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: #FFF;
+    font-size: 0.65rem;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    margin-left: 4px;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+/* Dashboard header con botón nueva entrada */
+.dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.dashboard-header h1 {
+    margin-bottom: 0;
+}
+
+.btn-nueva-entrada {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    padding: 0.65rem 1.25rem;
+}
+
 @media (max-width: 768px) {
     .nav-user {
         margin-left: 0;
         margin-top: 0.5rem;
+        justify-content: center;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .btn-nueva-entrada {
+        width: 100%;
         justify-content: center;
     }
 }

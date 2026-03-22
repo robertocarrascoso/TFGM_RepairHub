@@ -80,6 +80,24 @@ def get_db():
     return mysql.connector.connect(**DB_CONFIG)
 
 
+# --- Context processor: variables globales para plantillas ---
+
+@app.context_processor
+def inject_pendientes():
+    if 'user_id' not in session:
+        return {'pendientes_count': 0}
+    if PREVIEW_MODE:
+        count = len([r for r in mock_reparaciones if r['estado'] != 'Entregado'])
+        return {'pendientes_count': count}
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) as total FROM reparaciones WHERE estado != 'Entregado'")
+    count = cursor.fetchone()['total']
+    cursor.close()
+    db.close()
+    return {'pendientes_count': count}
+
+
 # --- Rutas de autenticación ---
 
 @app.route('/login', methods=['GET', 'POST'])

@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}RepairHub{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -24,8 +25,7 @@
 
             <ul class="nav-links" id="nav-links">
                 <li><a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}class="active"{% endif %}>Dashboard</a></li>
-                <li><a href="{{ url_for('nueva_entrada') }}" {% if request.endpoint == 'nueva_entrada' %}class="active"{% endif %}>Nueva entrada</a></li>
-                <li><a href="{{ url_for('reparaciones') }}" {% if request.endpoint == 'reparaciones' %}class="active"{% endif %}>Reparaciones</a></li>
+                <li><a href="{{ url_for('reparaciones') }}" {% if request.endpoint == 'reparaciones' %}class="active"{% endif %}>Reparaciones{% if pendientes_count %} <span class="nav-badge">{{ pendientes_count }}</span>{% endif %}</a></li>
                 <li><a href="{{ url_for('clientes') }}" {% if request.endpoint == 'clientes' %}class="active"{% endif %}>Clientes</a></li>
                 <li><a href="{{ url_for('buscar') }}" {% if request.endpoint == 'buscar' %}class="active"{% endif %}>Buscar</a></li>
                 {% if session.get('user_rol') == 'admin' %}
