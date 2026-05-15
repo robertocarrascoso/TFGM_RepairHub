@@ -1,34 +1,24 @@
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm, cm
+from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
-from reportlab.lib.styles import getSampleStyleSheet
-from datetime import datetime
+
+
+def _dibujar_texto_largo(c, x, y, texto, max_chars=80, paso=0.5 * cm):
+    while texto:
+        c.drawString(x, y, texto[:max_chars])
+        texto = texto[max_chars:]
+        y -= paso
+    return y
+
 
 def generar_pdf(datos, output_path):
-    """
-    Genera un PDF A4 con resguardo (parte superior) + etiqueta (parte inferior).
-
-    datos = {
-        'codigo': 'REP-2026-00001',
-        'nombre_cliente': 'Carlos García',
-        'telefono': '612345678',
-        'email': 'carlos@email.com',
-        'tipo_dispositivo': 'Móvil',
-        'marca': 'Samsung',
-        'modelo': 'Galaxy S23',
-        'averia': 'Pantalla rota',
-        'observaciones': 'Golpe en esquina inferior',
-        'fecha': datetime.now()
-    }
-    """
-    w, h = A4  # 210 x 297 mm
+    """Genera un PDF A4 con resguardo arriba y etiqueta troquelada abajo."""
+    w, h = A4
     c = canvas.Canvas(output_path, pagesize=A4)
 
-    # PARTE SUPERIOR — Resguardo
     margen = 2 * cm
     y = h - margen
 
-    # Cabecera
     c.setFont("Helvetica-Bold", 18)
     c.drawString(margen, y, "RepairHub")
     y -= 0.6 * cm
@@ -37,24 +27,20 @@ def generar_pdf(datos, output_path):
     c.drawString(margen, y, "Servicio técnico de reparaciones — Tel: 600 000 000")
     y -= 1.5 * cm
 
-    # Código de reparación (grande)
     c.setFillColorRGB(0, 0, 0)
     c.setFont("Helvetica-Bold", 22)
     c.drawString(margen, y, datos['codigo'])
 
-    # Fecha a la derecha
     c.setFont("Helvetica", 10)
     fecha_str = datos['fecha'].strftime('%d/%m/%Y %H:%M')
     c.drawRightString(w - margen, y, f"Fecha: {fecha_str}")
     y -= 1.5 * cm
 
-    # Línea separadora
     c.setStrokeColorRGB(0.8, 0.8, 0.8)
     c.setLineWidth(0.5)
     c.line(margen, y, w - margen, y)
     y -= 1 * cm
 
-    # Datos del cliente
     c.setFont("Helvetica-Bold", 11)
     c.drawString(margen, y, "DATOS DEL CLIENTE")
     y -= 0.6 * cm
@@ -69,7 +55,6 @@ def generar_pdf(datos, output_path):
     c.drawString(margen, y, " | ".join(contacto))
     y -= 1 * cm
 
-    # Datos del dispositivo
     c.setFont("Helvetica-Bold", 11)
     c.drawString(margen, y, "DATOS DEL DISPOSITIVO")
     y -= 0.6 * cm
@@ -77,18 +62,11 @@ def generar_pdf(datos, output_path):
     c.drawString(margen, y, f"Tipo: {datos['tipo_dispositivo']}    Marca: {datos.get('marca', '-')}    Modelo: {datos.get('modelo', '-')}")
     y -= 0.8 * cm
 
-    # Avería
     c.setFont("Helvetica-Bold", 11)
     c.drawString(margen, y, "AVERÍA / MOTIVO DE ENTRADA")
     y -= 0.6 * cm
     c.setFont("Helvetica", 10)
-    # Dividir texto largo en líneas
-    averia = datos['averia']
-    max_chars = 80
-    while averia:
-        c.drawString(margen, y, averia[:max_chars])
-        averia = averia[max_chars:]
-        y -= 0.5 * cm
+    y = _dibujar_texto_largo(c, margen, y, datos['averia'])
 
     if datos.get('observaciones'):
         y -= 0.3 * cm
@@ -96,13 +74,8 @@ def generar_pdf(datos, output_path):
         c.drawString(margen, y, "OBSERVACIONES")
         y -= 0.6 * cm
         c.setFont("Helvetica", 10)
-        obs = datos['observaciones']
-        while obs:
-            c.drawString(margen, y, obs[:max_chars])
-            obs = obs[max_chars:]
-            y -= 0.5 * cm
+        y = _dibujar_texto_largo(c, margen, y, datos['observaciones'])
 
-    # Condiciones de servicio
     y -= 0.5 * cm
     c.setFont("Helvetica", 7)
     c.setFillColorRGB(0.5, 0.5, 0.5)
@@ -117,14 +90,12 @@ def generar_pdf(datos, output_path):
         c.drawString(margen, y, linea)
         y -= 0.4 * cm
 
-    # Línea de firma
     y -= 0.8 * cm
     c.setFillColorRGB(0, 0, 0)
     c.setFont("Helvetica", 9)
     c.drawString(margen, y, "Firma del cliente: ___________________________")
     c.drawRightString(w - margen, y, f"Fecha: {datos['fecha'].strftime('%d/%m/%Y')}")
 
-    # LÍNEA DE CORTE
     corte_y = 9 * cm
     c.setDash(3, 3)
     c.setStrokeColorRGB(0.6, 0.6, 0.6)
@@ -135,17 +106,14 @@ def generar_pdf(datos, output_path):
     c.drawCentredString(w / 2, corte_y + 0.2 * cm, "✂ Cortar por aquí — Etiqueta para el dispositivo")
     c.setDash()
 
-    # PARTE INFERIOR — Etiqueta
     etiqueta_y = corte_y - 0.5 * cm
     etiqueta_h = 7.5 * cm
     etiqueta_x = margen
 
-    # Borde de la etiqueta
     c.setStrokeColorRGB(0, 0, 0)
     c.setLineWidth(1)
     c.rect(etiqueta_x, etiqueta_y - etiqueta_h, w - 2 * margen, etiqueta_h)
 
-    # Contenido de la etiqueta
     ey = etiqueta_y - 0.8 * cm
 
     c.setFillColorRGB(0, 0, 0)

@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from config import DB_CONFIG, SECRET_KEY
 from utilidades.pdf_generator import generar_pdf
-from datetime import datetime
+from datetime import datetime, date
 import csv
 import io
 import os
@@ -13,12 +13,9 @@ app = Flask(__name__,
             static_folder='estaticos')
 app.secret_key = SECRET_KEY
 
-# Modo preview: datos hardcodeados (fake) para desarrollar sin base de datos
-# Cambiaresmos a False cuando se conecte a la MariaDB real:
+# Datos mock para desarrollo sin BD. Cambiar a False al conectar MariaDB.
 PREVIEW_MODE = True
 
-
-# --- Sistema de autenticación ---
 
 def login_required(f):
     @wraps(f)
@@ -42,7 +39,7 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# Datos hardcodeados (fake)
+
 if PREVIEW_MODE:
     mock_clientes = [
         {'id': 1, 'nombre': 'Carlos García', 'telefono': '612345678', 'email': 'carlos@email.com', 'created_at': datetime(2026, 1, 15)},
@@ -74,7 +71,6 @@ if PREVIEW_MODE:
     ]
 
 
-# Conexión a MariaDB (solo cuando PREVIEW_MODE = False)
 def get_db():
     if PREVIEW_MODE:
         return None
@@ -82,7 +78,46 @@ def get_db():
     return mysql.connector.connect(**DB_CONFIG)
 
 
-# --- Context processor: variables globales para plantillas ---
+def _buscar_rep_mock(codigo):
+    return next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+
+
+def _buscar_cliente_mock(cliente_id):
+    return next((c for c in mock_clientes if c['id'] == cliente_id), None)
+
+
+def _anadir_nombre_cliente(reps):
+    for rep in reps:
+        c = _buscar_cliente_mock(rep['cliente_id'])
+        rep['cliente_nombre'] = c['nombre'] if c else 'Desconocido'
+    return reps
+
+
+def _registrar_historial_mock(reparacion_id, estado):
+    mock_historial.append({
+        'id': len(mock_historial) + 1,
+        'reparacion_id': reparacion_id,
+        'estado': estado,
+        'tecnico': session.get('user_nombre', 'Técnico'),
+        'fecha': datetime.now()
+    })
+
+
+def _construir_where_filtros(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre):
+    where, params = [], []
+    if filtro != 'todos':
+        where.append("r.estado = %s"); params.append(filtro)
+    if fecha_desde:
+        where.append("DATE(r.created_at) >= %s"); params.append(fecha_desde)
+    if fecha_hasta:
+        where.append("DATE(r.created_at) <= %s"); params.append(fecha_hasta)
+    if tipo_dispositivo:
+        where.append("r.tipo_dispositivo = %s"); params.append(tipo_dispositivo)
+    if cliente_nombre:
+        where.append("c.nombre LIKE %s"); params.append(f'%{cliente_nombre}%')
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    return where_sql, params
+
 
 @app.context_processor
 def inject_pendientes():
@@ -99,8 +134,6 @@ def inject_pendientes():
     db.close()
     return {'pendientes_count': count}
 
-
-# --- Rutas de autenticación ---
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -147,8 +180,6 @@ def logout():
     return redirect(url_for('login'))
 
 
-# --- Rutas de la aplicación ---
-
 @app.route('/')
 @login_required
 def dashboard():
@@ -157,11 +188,7 @@ def dashboard():
         este_mes = len([r for r in mock_reparaciones if r['created_at'].month == datetime.now().month and r['created_at'].year == datetime.now().year])
         ingresos_mes = sum(r['precio_final'] or 0 for r in mock_reparaciones if r['estado'] == 'Entregado' and r['updated_at'].month == datetime.now().month)
         ultimas = sorted(mock_reparaciones, key=lambda r: r['created_at'], reverse=True)[:5]
-
-        # Añadir nombre del cliente
-        for rep in ultimas:
-            cliente = next((c for c in mock_clientes if c['id'] == rep['cliente_id']), None)
-            rep['cliente_nombre'] = cliente['nombre'] if cliente else 'Desconocido'
+        _anadir_nombre_cliente(ultimas)
 
         return render_template('dashboard.html',
             pendientes=pendientes,
@@ -172,7 +199,6 @@ def dashboard():
             reparaciones=mock_reparaciones
         )
 
-    # Con base de datos real
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -220,7 +246,6 @@ def dashboard():
 @login_required
 def nueva_entrada():
     if request.method == 'POST':
-        # Recoger datos del formulario
         nombre = request.form.get('nombre', '').strip()
         telefono = request.form.get('telefono', '').strip()
         email = request.form.get('email', '').strip()
@@ -230,7 +255,6 @@ def nueva_entrada():
         averia = request.form.get('averia', '').strip()
         observaciones = request.form.get('observaciones', '').strip()
 
-        # Validación básica
         if not nombre or not averia or not tipo:
             flash('Nombre, avería y tipo de dispositivo son obligatorios.', 'error')
             return redirect(url_for('nueva_entrada'))
@@ -240,14 +264,12 @@ def nueva_entrada():
             return redirect(url_for('nueva_entrada'))
 
         if PREVIEW_MODE:
-            # Buscar o crear cliente en datos mock
             cliente = next((c for c in mock_clientes if c['telefono'] == telefono or c['email'] == email), None)
             if not cliente:
                 nuevo_id = max(c['id'] for c in mock_clientes) + 1
                 cliente = {'id': nuevo_id, 'nombre': nombre, 'telefono': telefono, 'email': email, 'created_at': datetime.now()}
                 mock_clientes.append(cliente)
 
-            # Generar código (buscar el máximo existente para no repetir)
             year = datetime.now().year
             nums_existentes = []
             for r in mock_reparaciones:
@@ -260,7 +282,6 @@ def nueva_entrada():
             num = max(nums_existentes, default=0) + 1
             codigo = f"REP-{year}-{num:05d}"
 
-            # Crear reparación
             nueva_rep = {
                 'id': len(mock_reparaciones) + 1,
                 'codigo': codigo,
@@ -278,23 +299,13 @@ def nueva_entrada():
                 'updated_at': datetime.now()
             }
             mock_reparaciones.append(nueva_rep)
-
-            # Registrar en historial
-            mock_historial.append({
-                'id': len(mock_historial) + 1,
-                'reparacion_id': nueva_rep['id'],
-                'estado': 'Recibido',
-                'tecnico': session.get('user_nombre', 'Técnico'),
-                'fecha': datetime.now()
-            })
+            _registrar_historial_mock(nueva_rep['id'], 'Recibido')
 
             return redirect(url_for('nueva_entrada', pdf=codigo))
 
-        # --- Con base de datos real ---
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
-        # Buscar cliente existente
         cursor.execute("SELECT * FROM clientes WHERE telefono = %s OR email = %s", (telefono, email))
         cliente = cursor.fetchone()
 
@@ -305,21 +316,19 @@ def nueva_entrada():
         else:
             cliente_id = cliente['id']
 
-        # Generar código único con contador atómico
+        # Contador atómico por año para evitar códigos duplicados en concurrencia
         year = datetime.now().year
         cursor.execute("INSERT INTO contadores (year, ultimo_num) VALUES (%s, 1) ON DUPLICATE KEY UPDATE ultimo_num = ultimo_num + 1", (year,))
         cursor.execute("SELECT ultimo_num FROM contadores WHERE year = %s", (year,))
         num = cursor.fetchone()['ultimo_num']
         codigo = f"REP-{year}-{num:05d}"
 
-        # Insertar reparación
         cursor.execute("""
             INSERT INTO reparaciones (codigo, cliente_id, tipo_dispositivo, marca, modelo, averia, observaciones)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (codigo, cliente_id, tipo, marca, modelo, averia, observaciones))
         reparacion_id = cursor.lastrowid
 
-        # Insertar primer estado
         cursor.execute("INSERT INTO historial_estados (reparacion_id, estado, tecnico) VALUES (%s, 'Recibido', %s)", (reparacion_id, session.get('user_nombre', 'Técnico')))
         db.commit()
         cursor.close()
@@ -333,7 +342,6 @@ PER_PAGE = 20
 
 
 def _filtrar_reparaciones_mock(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre):
-    """Aplica filtros sobre los datos mock de reparaciones."""
     lista = list(mock_reparaciones)
 
     if filtro != 'todos':
@@ -346,22 +354,15 @@ def _filtrar_reparaciones_mock(filtro, fecha_desde, fecha_hasta, tipo_dispositiv
         lista = [r for r in lista if r['tipo_dispositivo'] == tipo_dispositivo]
     if cliente_nombre:
         for r in lista:
-            c = next((c for c in mock_clientes if c['id'] == r['cliente_id']), None)
+            c = _buscar_cliente_mock(r['cliente_id'])
             r['_nombre_cliente'] = c['nombre'] if c else ''
         lista = [r for r in lista if cliente_nombre.lower() in r.get('_nombre_cliente', '').lower()]
 
-    # Añadir nombre del cliente
-    for rep in lista:
-        c = next((c for c in mock_clientes if c['id'] == rep['cliente_id']), None)
-        rep['cliente_nombre'] = c['nombre'] if c else 'Desconocido'
-
-    lista = sorted(lista, key=lambda r: r['created_at'], reverse=True)
-    return lista
+    _anadir_nombre_cliente(lista)
+    return sorted(lista, key=lambda r: r['created_at'], reverse=True)
 
 
 def _get_filtros_from_request():
-    """Extrae los parámetros de filtro de la petición."""
-    from datetime import date
     filtro = request.args.get('estado', 'todos')
     fecha_desde_str = request.args.get('fecha_desde', '')
     fecha_hasta_str = request.args.get('fecha_hasta', '')
@@ -410,28 +411,8 @@ def reparaciones():
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
-    # Construir query con filtros
-    where = []
-    params = []
-    if filtro != 'todos':
-        where.append("r.estado = %s")
-        params.append(filtro)
-    if fecha_desde:
-        where.append("DATE(r.created_at) >= %s")
-        params.append(fecha_desde)
-    if fecha_hasta:
-        where.append("DATE(r.created_at) <= %s")
-        params.append(fecha_hasta)
-    if tipo_dispositivo:
-        where.append("r.tipo_dispositivo = %s")
-        params.append(tipo_dispositivo)
-    if cliente_nombre:
-        where.append("c.nombre LIKE %s")
-        params.append(f'%{cliente_nombre}%')
+    where_sql, params = _construir_where_filtros(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre)
 
-    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
-
-    # Total para paginación
     cursor.execute(f"SELECT COUNT(*) as total FROM reparaciones r JOIN clientes c ON r.cliente_id = c.id{where_sql}", params)
     total = cursor.fetchone()['total']
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
@@ -447,7 +428,6 @@ def reparaciones():
     """, params + [PER_PAGE, offset])
     lista = cursor.fetchall()
 
-    # Tipos de dispositivo para el select de filtro
     cursor.execute("SELECT DISTINCT tipo_dispositivo FROM reparaciones ORDER BY tipo_dispositivo")
     tipos = [row['tipo_dispositivo'] for row in cursor.fetchall()]
 
@@ -460,11 +440,10 @@ def reparaciones():
         tipo_dispositivo=tipo_dispositivo, cliente=cliente_nombre,
         tipos_dispositivo=tipos)
 
-# Flujo de estados válidos
 FLUJO_ESTADOS = {
     'Recibido': ['Diagnosticado'],
     'Diagnosticado': ['Presupuesto enviado'],
-    'Presupuesto enviado': ['Presupuesto aceptado', 'Entregado'],  # Entregado = rechazado
+    'Presupuesto enviado': ['Presupuesto aceptado', 'Entregado'],  # "Entregado" aquí = presupuesto rechazado
     'Presupuesto aceptado': ['Reparando'],
     'Reparando': ['Esperando pieza', 'Listo'],
     'Esperando pieza': ['Reparando'],
@@ -476,12 +455,12 @@ FLUJO_ESTADOS = {
 @login_required
 def detalle_reparacion(codigo):
     if PREVIEW_MODE:
-        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        rep = _buscar_rep_mock(codigo)
         if not rep:
             flash('Reparación no encontrada.', 'error')
             return redirect(url_for('reparaciones'))
 
-        cliente = next((c for c in mock_clientes if c['id'] == rep['cliente_id']), None)
+        cliente = _buscar_cliente_mock(rep['cliente_id'])
         rep['cliente_nombre'] = cliente['nombre'] if cliente else 'Desconocido'
         rep['cliente_telefono'] = cliente.get('telefono', '') if cliente else ''
         rep['cliente_email'] = cliente.get('email', '') if cliente else ''
@@ -532,26 +511,17 @@ def cambiar_estado(codigo):
     nuevo_estado = request.form.get('nuevo_estado')
 
     if PREVIEW_MODE:
-        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        rep = _buscar_rep_mock(codigo)
         if rep and nuevo_estado in FLUJO_ESTADOS.get(rep['estado'], []):
             rep['estado'] = nuevo_estado
             rep['updated_at'] = datetime.now()
 
-            # Si se rechaza presupuesto
             if nuevo_estado == 'Entregado' and rep.get('presupuesto') and not rep.get('presupuesto_aceptado'):
                 rep['presupuesto_aceptado'] = False
-
-            # Si se acepta presupuesto
             if nuevo_estado == 'Presupuesto aceptado':
                 rep['presupuesto_aceptado'] = True
 
-            mock_historial.append({
-                'id': len(mock_historial) + 1,
-                'reparacion_id': rep['id'],
-                'estado': nuevo_estado,
-                'tecnico': session.get('user_nombre', 'Técnico'),
-                'fecha': datetime.now()
-            })
+            _registrar_historial_mock(rep['id'], nuevo_estado)
             flash(f'Estado cambiado a "{nuevo_estado}".', 'success')
         else:
             flash('Cambio de estado no válido.', 'error')
@@ -588,18 +558,12 @@ def enviar_presupuesto(codigo):
     presupuesto = request.form.get('presupuesto', type=float)
 
     if PREVIEW_MODE:
-        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        rep = _buscar_rep_mock(codigo)
         if rep and rep['estado'] == 'Diagnosticado':
             rep['presupuesto'] = presupuesto
             rep['estado'] = 'Presupuesto enviado'
             rep['updated_at'] = datetime.now()
-            mock_historial.append({
-                'id': len(mock_historial) + 1,
-                'reparacion_id': rep['id'],
-                'estado': 'Presupuesto enviado',
-                'tecnico': session.get('user_nombre', 'Técnico'),
-                'fecha': datetime.now()
-            })
+            _registrar_historial_mock(rep['id'], 'Presupuesto enviado')
             flash(f'Presupuesto de {presupuesto}€ enviado.', 'success')
         return redirect(url_for('detalle_reparacion', codigo=codigo))
 
@@ -625,7 +589,7 @@ def precio_final(codigo):
     precio = request.form.get('precio_final', type=float)
 
     if PREVIEW_MODE:
-        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        rep = _buscar_rep_mock(codigo)
         if rep:
             rep['precio_final'] = precio
             flash(f'Precio final: {precio}€.', 'success')
@@ -645,7 +609,7 @@ def precio_final(codigo):
 @login_required
 def editar_reparacion(codigo):
     if PREVIEW_MODE:
-        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        rep = _buscar_rep_mock(codigo)
         if not rep:
             flash('Reparación no encontrada.', 'error')
             return redirect(url_for('reparaciones'))
@@ -699,12 +663,11 @@ def editar_reparacion(codigo):
 @login_required
 def eliminar_reparacion(codigo):
     if PREVIEW_MODE:
-        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        rep = _buscar_rep_mock(codigo)
         if not rep:
             flash('Reparación no encontrada.', 'error')
             return redirect(url_for('reparaciones'))
 
-        # Eliminar historial asociado
         mock_historial[:] = [h for h in mock_historial if h['reparacion_id'] != rep['id']]
         mock_reparaciones.remove(rep)
         flash(f'Reparación {codigo} eliminada.', 'success')
@@ -776,7 +739,7 @@ def clientes():
 @login_required
 def detalle_cliente(id):
     if PREVIEW_MODE:
-        cliente = next((c for c in mock_clientes if c['id'] == id), None)
+        cliente = _buscar_cliente_mock(id)
         if not cliente:
             flash('Cliente no encontrado.', 'error')
             return redirect(url_for('clientes'))
@@ -815,7 +778,7 @@ def detalle_cliente(id):
 @login_required
 def editar_cliente(id):
     if PREVIEW_MODE:
-        cliente = next((c for c in mock_clientes if c['id'] == id), None)
+        cliente = _buscar_cliente_mock(id)
         if not cliente:
             flash('Cliente no encontrado.', 'error')
             return redirect(url_for('clientes'))
@@ -891,10 +854,7 @@ def api_buscar():
         reps = [r for r in mock_reparaciones
                 if q.lower() in r['codigo'].lower()
                 or q.lower() in r['averia'].lower()]
-
-        for rep in reps:
-            cliente = next((c for c in mock_clientes if c['id'] == rep['cliente_id']), None)
-            rep['cliente_nombre'] = cliente['nombre'] if cliente else 'Desconocido'
+        _anadir_nombre_cliente(reps)
 
         clientes = [c for c in mock_clientes
                     if q.lower() in c['nombre'].lower()
@@ -956,12 +916,12 @@ def api_buscar_cliente():
 @login_required
 def ver_pdf(codigo):
     if PREVIEW_MODE:
-        rep = next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
+        rep = _buscar_rep_mock(codigo)
         if not rep:
             flash('Reparación no encontrada.', 'error')
             return redirect(url_for('dashboard'))
 
-        cliente = next((c for c in mock_clientes if c['id'] == rep['cliente_id']), None)
+        cliente = _buscar_cliente_mock(rep['cliente_id'])
 
         datos = {
             'codigo': rep['codigo'],
@@ -1005,7 +965,6 @@ def ver_pdf(codigo):
             'fecha': row['created_at']
         }
 
-    # Servir PDF existente o generar uno nuevo
     pdf_dir = os.path.join(app.root_path, 'pdfs')
     os.makedirs(pdf_dir, exist_ok=True)
     pdf_path = os.path.join(pdf_dir, f'{codigo}.pdf')
@@ -1025,26 +984,7 @@ def exportar_csv():
     else:
         db = get_db()
         cursor = db.cursor(dictionary=True)
-
-        where = []
-        params = []
-        if filtro != 'todos':
-            where.append("r.estado = %s")
-            params.append(filtro)
-        if fecha_desde:
-            where.append("DATE(r.created_at) >= %s")
-            params.append(fecha_desde)
-        if fecha_hasta:
-            where.append("DATE(r.created_at) <= %s")
-            params.append(fecha_hasta)
-        if tipo_dispositivo:
-            where.append("r.tipo_dispositivo = %s")
-            params.append(tipo_dispositivo)
-        if cliente_nombre:
-            where.append("c.nombre LIKE %s")
-            params.append(f'%{cliente_nombre}%')
-
-        where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+        where_sql, params = _construir_where_filtros(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre)
 
         cursor.execute(f"""
             SELECT r.*, c.nombre as cliente_nombre
@@ -1057,7 +997,7 @@ def exportar_csv():
         db.close()
 
     output = io.StringIO()
-    output.write('\ufeff')  # BOM para Excel
+    output.write('﻿')  # BOM para que Excel detecte UTF-8
     writer = csv.writer(output, delimiter=';')
     writer.writerow(['Código', 'Cliente', 'Tipo dispositivo', 'Marca', 'Modelo', 'Avería', 'Estado', 'Presupuesto', 'Precio final', 'Fecha entrada'])
 
@@ -1083,8 +1023,6 @@ def exportar_csv():
         headers={'Content-Disposition': 'attachment; filename=reparaciones.csv'}
     )
 
-
-# --- Panel de administración ---
 
 @app.route('/admin')
 @admin_required
@@ -1118,7 +1056,6 @@ def crear_usuario():
         rol = 'tecnico'
 
     if PREVIEW_MODE:
-        # Comprobar email duplicado
         if any(u['email'] == email for u in mock_usuarios):
             flash('Ya existe un usuario con ese email.', 'error')
             return redirect(url_for('admin_panel'))
@@ -1159,7 +1096,6 @@ def crear_usuario():
 @app.route('/admin/eliminar-usuario/<int:id>', methods=['POST'])
 @admin_required
 def eliminar_usuario(id):
-    # No permitir eliminarse a sí mismo
     if id == session.get('user_id'):
         flash('No puedes eliminar tu propio usuario.', 'error')
         return redirect(url_for('admin_panel'))
