@@ -6,7 +6,6 @@
 <h1>Panel de administración</h1>
 
 <div class="admin-grid">
-    <!-- Formulario para crear usuario -->
     <div class="card">
         <h3>Crear nuevo usuario</h3>
         <form method="POST" action="{{ url_for('crear_usuario') }}">
@@ -33,7 +32,6 @@
         </form>
     </div>
 
-    <!-- Lista de usuarios existentes -->
     <div class="card">
         <h3>Usuarios registrados</h3>
         {% if usuarios %}

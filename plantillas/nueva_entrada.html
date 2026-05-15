@@ -85,14 +85,12 @@
 {% block scripts %}
 {% if request.args.get('pdf') %}
 <script>
-    // Cerrar modal con Escape
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             var overlay = document.getElementById('modal-overlay');
             if (overlay) overlay.remove();
         }
     });
-    // Cerrar modal al hacer clic fuera
     document.getElementById('modal-overlay').addEventListener('click', function(e) {
         if (e.target === this) this.remove();
     });

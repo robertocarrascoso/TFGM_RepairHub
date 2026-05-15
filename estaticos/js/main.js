@@ -1,5 +1,3 @@
-// Toggle tema oscuro / claro
-
 const themeToggle = document.getElementById('theme-toggle');
 const html = document.documentElement;
 
@@ -12,8 +10,6 @@ if (themeToggle) {
     });
 }
 
-// Menú hamburguesa (responsive)
-
 const hamburger = document.getElementById('hamburger');
 const navLinks = document.getElementById('nav-links');
 
@@ -22,15 +18,12 @@ if (hamburger) {
         navLinks.classList.toggle('active');
     });
 
-    // Cerrar menú al hacer clic en un enlace
     document.querySelectorAll('.nav-links a').forEach(link => {
         link.addEventListener('click', () => {
             navLinks.classList.remove('active');
         });
     });
 }
-
-// Validación formulario nueva entrada
 
 const formNuevaEntrada = document.querySelector('.form-nueva-entrada');
 if (formNuevaEntrada) {
@@ -44,8 +37,6 @@ if (formNuevaEntrada) {
         }
     });
 }
-
-// Autocompletado de clientes
 
 const telefonoInput = document.getElementById('telefono');
 const nombreInput = document.getElementById('nombre');

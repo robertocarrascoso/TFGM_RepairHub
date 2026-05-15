@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import badge_estado %}
 {% block title %}{{ cliente.nombre }} — RepairHub{% endblock %}
 
 {% block content %}
@@ -27,7 +28,7 @@
                 <td><a href="/reparacion/{{ rep.codigo }}">{{ rep.codigo }}</a></td>
                 <td>{{ rep.tipo_dispositivo }} {{ rep.marca }}</td>
                 <td>{{ rep.averia[:40] }}...</td>
-                <td><span class="badge badge-{{ rep.estado|lower|replace(' ', '-') }}">{{ rep.estado }}</span></td>
+                <td>{{ badge_estado(rep.estado) }}</td>
                 <td>{{ rep.created_at.strftime('%d/%m/%Y') }}</td>
             </tr>
             {% endfor %}
