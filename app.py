@@ -13,9 +13,6 @@ app = Flask(__name__,
             static_folder='estaticos')
 app.secret_key = SECRET_KEY
 
-# Datos mock para desarrollo sin BD. Cambiar a False al conectar MariaDB.
-PREVIEW_MODE = True
-
 
 def login_required(f):
     @wraps(f)
@@ -40,67 +37,9 @@ def admin_required(f):
     return decorated
 
 
-if PREVIEW_MODE:
-    mock_clientes = [
-        {'id': 1, 'nombre': 'Carlos García', 'telefono': '612345678', 'email': 'carlos@email.com', 'created_at': datetime(2026, 1, 15)},
-        {'id': 2, 'nombre': 'María López', 'telefono': '623456789', 'email': 'maria@email.com', 'created_at': datetime(2026, 2, 3)},
-        {'id': 3, 'nombre': 'Pedro Porro', 'telefono': '634567890', 'email': '', 'created_at': datetime(2026, 2, 10)},
-    ]
-
-    mock_reparaciones = [
-        {'id': 1, 'codigo': 'REP-2026-00001', 'cliente_id': 1, 'tipo_dispositivo': 'Móvil', 'marca': 'Samsung', 'modelo': 'Galaxy S23', 'averia': 'Pantalla rota', 'observaciones': 'Golpe en esquina inferior', 'estado': 'Entregado', 'presupuesto': 120.00, 'precio_final': 120.00, 'presupuesto_aceptado': True, 'created_at': datetime(2026, 1, 10), 'updated_at': datetime(2026, 1, 15)},
-        {'id': 2, 'codigo': 'REP-2026-00002', 'cliente_id': 2, 'tipo_dispositivo': 'Portátil', 'marca': 'HP', 'modelo': 'Pavilion 15', 'averia': 'No enciende', 'observaciones': '', 'estado': 'Reparando', 'presupuesto': 85.00, 'precio_final': None, 'presupuesto_aceptado': True, 'created_at': datetime(2026, 2, 1), 'updated_at': datetime(2026, 2, 8)},
-        {'id': 3, 'codigo': 'REP-2026-00003', 'cliente_id': 3, 'tipo_dispositivo': 'Móvil', 'marca': 'iPhone', 'modelo': '14 Pro', 'averia': 'Batería se agota rápido', 'observaciones': '', 'estado': 'Presupuesto enviado', 'presupuesto': 65.00, 'precio_final': None, 'presupuesto_aceptado': None, 'created_at': datetime(2026, 2, 15), 'updated_at': datetime(2026, 2, 18)},
-        {'id': 4, 'codigo': 'REP-2026-00004', 'cliente_id': 1, 'tipo_dispositivo': 'Tablet', 'marca': 'iPad', 'modelo': 'Air 5', 'averia': 'Puerto de carga no funciona', 'observaciones': '', 'estado': 'Recibido', 'presupuesto': None, 'precio_final': None, 'presupuesto_aceptado': None, 'created_at': datetime(2026, 3, 1), 'updated_at': datetime(2026, 3, 1)},
-        {'id': 5, 'codigo': 'REP-2026-00005', 'cliente_id': 2, 'tipo_dispositivo': 'Consola', 'marca': 'Sony', 'modelo': 'PS5', 'averia': 'No lee discos', 'observaciones': '', 'estado': 'Diagnosticado', 'presupuesto': None, 'precio_final': None, 'presupuesto_aceptado': None, 'created_at': datetime(2026, 3, 2), 'updated_at': datetime(2026, 3, 3)},
-    ]
-
-    mock_usuarios = [
-        {'id': 1, 'nombre': 'Administrador', 'email': 'admin@repairhub.com', 'password_hash': generate_password_hash('admin123'), 'rol': 'admin', 'created_at': datetime(2026, 1, 1)},
-        {'id': 2, 'nombre': 'Roberto', 'email': 'roberto@repairhub.com', 'password_hash': generate_password_hash('tecnico123'), 'rol': 'tecnico', 'created_at': datetime(2026, 1, 1)},
-    ]
-
-    mock_historial = [
-        {'id': 1, 'reparacion_id': 1, 'estado': 'Recibido', 'tecnico': 'Roberto', 'fecha': datetime(2026, 1, 10, 9, 30)},
-        {'id': 2, 'reparacion_id': 1, 'estado': 'Diagnosticado', 'tecnico': 'Roberto', 'fecha': datetime(2026, 1, 11, 11, 0)},
-        {'id': 3, 'reparacion_id': 1, 'estado': 'Presupuesto enviado', 'tecnico': 'Roberto', 'fecha': datetime(2026, 1, 11, 15, 0)},
-        {'id': 4, 'reparacion_id': 1, 'estado': 'Presupuesto aceptado', 'tecnico': 'Roberto', 'fecha': datetime(2026, 1, 12, 10, 0)},
-        {'id': 5, 'reparacion_id': 1, 'estado': 'Reparando', 'tecnico': 'Roberto', 'fecha': datetime(2026, 1, 13, 9, 0)},
-        {'id': 6, 'reparacion_id': 1, 'estado': 'Listo', 'tecnico': 'Roberto', 'fecha': datetime(2026, 1, 14, 17, 0)},
-        {'id': 7, 'reparacion_id': 1, 'estado': 'Entregado', 'tecnico': 'Roberto', 'fecha': datetime(2026, 1, 15, 12, 0)},
-    ]
-
-
 def get_db():
-    if PREVIEW_MODE:
-        return None
     import mysql.connector
     return mysql.connector.connect(**DB_CONFIG)
-
-
-def _buscar_rep_mock(codigo):
-    return next((r for r in mock_reparaciones if r['codigo'] == codigo), None)
-
-
-def _buscar_cliente_mock(cliente_id):
-    return next((c for c in mock_clientes if c['id'] == cliente_id), None)
-
-
-def _anadir_nombre_cliente(reps):
-    for rep in reps:
-        c = _buscar_cliente_mock(rep['cliente_id'])
-        rep['cliente_nombre'] = c['nombre'] if c else 'Desconocido'
-    return reps
-
-
-def _registrar_historial_mock(reparacion_id, estado):
-    mock_historial.append({
-        'id': len(mock_historial) + 1,
-        'reparacion_id': reparacion_id,
-        'estado': estado,
-        'tecnico': session.get('user_nombre', 'Técnico'),
-        'fecha': datetime.now()
-    })
 
 
 def _construir_where_filtros(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre):
@@ -123,9 +62,6 @@ def _construir_where_filtros(filtro, fecha_desde, fecha_hasta, tipo_dispositivo,
 def inject_pendientes():
     if 'user_id' not in session:
         return {'pendientes_count': 0}
-    if PREVIEW_MODE:
-        count = len([r for r in mock_reparaciones if r['estado'] != 'Entregado'])
-        return {'pendientes_count': count}
     db = get_db()
     cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT COUNT(*) as total FROM reparaciones WHERE estado != 'Entregado'")
@@ -143,16 +79,6 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
-
-        if PREVIEW_MODE:
-            user = next((u for u in mock_usuarios if u['email'] == email), None)
-            if user and check_password_hash(user['password_hash'], password):
-                session['user_id'] = user['id']
-                session['user_nombre'] = user['nombre']
-                session['user_rol'] = user['rol']
-                return redirect(url_for('dashboard'))
-            flash('Email o contraseña incorrectos.', 'error')
-            return redirect(url_for('login'))
 
         db = get_db()
         cursor = db.cursor(dictionary=True)
@@ -183,22 +109,6 @@ def logout():
 @app.route('/')
 @login_required
 def dashboard():
-    if PREVIEW_MODE:
-        pendientes = len([r for r in mock_reparaciones if r['estado'] != 'Entregado'])
-        este_mes = len([r for r in mock_reparaciones if r['created_at'].month == datetime.now().month and r['created_at'].year == datetime.now().year])
-        ingresos_mes = sum(r['precio_final'] or 0 for r in mock_reparaciones if r['estado'] == 'Entregado' and r['updated_at'].month == datetime.now().month)
-        ultimas = sorted(mock_reparaciones, key=lambda r: r['created_at'], reverse=True)[:5]
-        _anadir_nombre_cliente(ultimas)
-
-        return render_template('dashboard.html',
-            pendientes=pendientes,
-            este_mes=este_mes,
-            ingresos_mes=ingresos_mes,
-            tiempo_medio=3.5,
-            ultimas=ultimas,
-            reparaciones=mock_reparaciones
-        )
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -263,46 +173,6 @@ def nueva_entrada():
             flash('Indica al menos un dato de contacto (teléfono o email).', 'error')
             return redirect(url_for('nueva_entrada'))
 
-        if PREVIEW_MODE:
-            cliente = next((c for c in mock_clientes if c['telefono'] == telefono or c['email'] == email), None)
-            if not cliente:
-                nuevo_id = max(c['id'] for c in mock_clientes) + 1
-                cliente = {'id': nuevo_id, 'nombre': nombre, 'telefono': telefono, 'email': email, 'created_at': datetime.now()}
-                mock_clientes.append(cliente)
-
-            year = datetime.now().year
-            nums_existentes = []
-            for r in mock_reparaciones:
-                partes = r['codigo'].split('-')
-                if len(partes) == 3 and partes[1] == str(year):
-                    try:
-                        nums_existentes.append(int(partes[2]))
-                    except ValueError:
-                        pass
-            num = max(nums_existentes, default=0) + 1
-            codigo = f"REP-{year}-{num:05d}"
-
-            nueva_rep = {
-                'id': len(mock_reparaciones) + 1,
-                'codigo': codigo,
-                'cliente_id': cliente['id'],
-                'tipo_dispositivo': tipo,
-                'marca': marca,
-                'modelo': modelo,
-                'averia': averia,
-                'observaciones': observaciones,
-                'estado': 'Recibido',
-                'presupuesto': None,
-                'precio_final': None,
-                'presupuesto_aceptado': None,
-                'created_at': datetime.now(),
-                'updated_at': datetime.now()
-            }
-            mock_reparaciones.append(nueva_rep)
-            _registrar_historial_mock(nueva_rep['id'], 'Recibido')
-
-            return redirect(url_for('nueva_entrada', pdf=codigo))
-
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
@@ -338,28 +208,8 @@ def nueva_entrada():
 
     return render_template('nueva_entrada.html')
 
+
 PER_PAGE = 20
-
-
-def _filtrar_reparaciones_mock(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre):
-    lista = list(mock_reparaciones)
-
-    if filtro != 'todos':
-        lista = [r for r in lista if r['estado'] == filtro]
-    if fecha_desde:
-        lista = [r for r in lista if r['created_at'].date() >= fecha_desde]
-    if fecha_hasta:
-        lista = [r for r in lista if r['created_at'].date() <= fecha_hasta]
-    if tipo_dispositivo:
-        lista = [r for r in lista if r['tipo_dispositivo'] == tipo_dispositivo]
-    if cliente_nombre:
-        for r in lista:
-            c = _buscar_cliente_mock(r['cliente_id'])
-            r['_nombre_cliente'] = c['nombre'] if c else ''
-        lista = [r for r in lista if cliente_nombre.lower() in r.get('_nombre_cliente', '').lower()]
-
-    _anadir_nombre_cliente(lista)
-    return sorted(lista, key=lambda r: r['created_at'], reverse=True)
 
 
 def _get_filtros_from_request():
@@ -393,21 +243,6 @@ def _get_filtros_from_request():
 def reparaciones():
     filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre, page, fecha_desde_str, fecha_hasta_str = _get_filtros_from_request()
 
-    if PREVIEW_MODE:
-        lista = _filtrar_reparaciones_mock(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre)
-        total = len(lista)
-        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-        page = min(page, total_pages)
-        lista_paginada = lista[(page - 1) * PER_PAGE: page * PER_PAGE]
-
-        tipos = sorted(set(r['tipo_dispositivo'] for r in mock_reparaciones))
-        return render_template('reparaciones.html',
-            reparaciones=lista_paginada, filtro_actual=filtro,
-            page=page, total_pages=total_pages, total=total,
-            fecha_desde=fecha_desde_str, fecha_hasta=fecha_hasta_str,
-            tipo_dispositivo=tipo_dispositivo, cliente=cliente_nombre,
-            tipos_dispositivo=tipos)
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -440,6 +275,7 @@ def reparaciones():
         tipo_dispositivo=tipo_dispositivo, cliente=cliente_nombre,
         tipos_dispositivo=tipos)
 
+
 FLUJO_ESTADOS = {
     'Recibido': ['Diagnosticado'],
     'Diagnosticado': ['Presupuesto enviado'],
@@ -451,33 +287,10 @@ FLUJO_ESTADOS = {
     'Entregado': []
 }
 
+
 @app.route('/reparacion/<codigo>')
 @login_required
 def detalle_reparacion(codigo):
-    if PREVIEW_MODE:
-        rep = _buscar_rep_mock(codigo)
-        if not rep:
-            flash('Reparación no encontrada.', 'error')
-            return redirect(url_for('reparaciones'))
-
-        cliente = _buscar_cliente_mock(rep['cliente_id'])
-        rep['cliente_nombre'] = cliente['nombre'] if cliente else 'Desconocido'
-        rep['cliente_telefono'] = cliente.get('telefono', '') if cliente else ''
-        rep['cliente_email'] = cliente.get('email', '') if cliente else ''
-
-        historial = sorted(
-            [h for h in mock_historial if h['reparacion_id'] == rep['id']],
-            key=lambda h: h['fecha'], reverse=True
-        )
-
-        estados_posibles = FLUJO_ESTADOS.get(rep['estado'], [])
-
-        return render_template('reparacion.html',
-            rep=rep, cliente=cliente,
-            historial=historial,
-            estados_posibles=estados_posibles
-        )
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -510,23 +323,6 @@ def detalle_reparacion(codigo):
 def cambiar_estado(codigo):
     nuevo_estado = request.form.get('nuevo_estado')
 
-    if PREVIEW_MODE:
-        rep = _buscar_rep_mock(codigo)
-        if rep and nuevo_estado in FLUJO_ESTADOS.get(rep['estado'], []):
-            rep['estado'] = nuevo_estado
-            rep['updated_at'] = datetime.now()
-
-            if nuevo_estado == 'Entregado' and rep.get('presupuesto') and not rep.get('presupuesto_aceptado'):
-                rep['presupuesto_aceptado'] = False
-            if nuevo_estado == 'Presupuesto aceptado':
-                rep['presupuesto_aceptado'] = True
-
-            _registrar_historial_mock(rep['id'], nuevo_estado)
-            flash(f'Estado cambiado a "{nuevo_estado}".', 'success')
-        else:
-            flash('Cambio de estado no válido.', 'error')
-        return redirect(url_for('detalle_reparacion', codigo=codigo))
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -550,22 +346,10 @@ def cambiar_estado(codigo):
     cursor.close()
     db.close()
     return redirect(url_for('detalle_reparacion', codigo=codigo))
-
-
 @app.route('/reparacion/<codigo>/presupuesto', methods=['POST'])
 @login_required
 def enviar_presupuesto(codigo):
     presupuesto = request.form.get('presupuesto', type=float)
-
-    if PREVIEW_MODE:
-        rep = _buscar_rep_mock(codigo)
-        if rep and rep['estado'] == 'Diagnosticado':
-            rep['presupuesto'] = presupuesto
-            rep['estado'] = 'Presupuesto enviado'
-            rep['updated_at'] = datetime.now()
-            _registrar_historial_mock(rep['id'], 'Presupuesto enviado')
-            flash(f'Presupuesto de {presupuesto}€ enviado.', 'success')
-        return redirect(url_for('detalle_reparacion', codigo=codigo))
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -588,13 +372,6 @@ def enviar_presupuesto(codigo):
 def precio_final(codigo):
     precio = request.form.get('precio_final', type=float)
 
-    if PREVIEW_MODE:
-        rep = _buscar_rep_mock(codigo)
-        if rep:
-            rep['precio_final'] = precio
-            flash(f'Precio final: {precio}€.', 'success')
-        return redirect(url_for('detalle_reparacion', codigo=codigo))
-
     db = get_db()
     cursor = db.cursor()
     cursor.execute("UPDATE reparaciones SET precio_final = %s WHERE codigo = %s", (precio, codigo))
@@ -608,24 +385,6 @@ def precio_final(codigo):
 @app.route('/reparacion/<codigo>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_reparacion(codigo):
-    if PREVIEW_MODE:
-        rep = _buscar_rep_mock(codigo)
-        if not rep:
-            flash('Reparación no encontrada.', 'error')
-            return redirect(url_for('reparaciones'))
-
-        if request.method == 'POST':
-            rep['tipo_dispositivo'] = request.form.get('tipo_dispositivo', '').strip() or rep['tipo_dispositivo']
-            rep['marca'] = request.form.get('marca', '').strip()
-            rep['modelo'] = request.form.get('modelo', '').strip()
-            rep['averia'] = request.form.get('averia', '').strip() or rep['averia']
-            rep['observaciones'] = request.form.get('observaciones', '').strip()
-            rep['updated_at'] = datetime.now()
-            flash('Reparación actualizada.', 'success')
-            return redirect(url_for('detalle_reparacion', codigo=codigo))
-
-        return render_template('editar_reparacion.html', rep=rep)
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM reparaciones WHERE codigo = %s", (codigo,))
@@ -662,17 +421,6 @@ def editar_reparacion(codigo):
 @app.route('/reparacion/<codigo>/eliminar', methods=['POST'])
 @login_required
 def eliminar_reparacion(codigo):
-    if PREVIEW_MODE:
-        rep = _buscar_rep_mock(codigo)
-        if not rep:
-            flash('Reparación no encontrada.', 'error')
-            return redirect(url_for('reparaciones'))
-
-        mock_historial[:] = [h for h in mock_historial if h['reparacion_id'] != rep['id']]
-        mock_reparaciones.remove(rep)
-        flash(f'Reparación {codigo} eliminada.', 'success')
-        return redirect(url_for('reparaciones'))
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id FROM reparaciones WHERE codigo = %s", (codigo,))
@@ -700,18 +448,6 @@ def clientes():
     if page < 1:
         page = 1
 
-    if PREVIEW_MODE:
-        lista = []
-        for c in mock_clientes:
-            n_reps = len([r for r in mock_reparaciones if r['cliente_id'] == c['id']])
-            lista.append({**c, 'n_reparaciones': n_reps})
-        total = len(lista)
-        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-        page = min(page, total_pages)
-        lista_paginada = lista[(page - 1) * PER_PAGE: page * PER_PAGE]
-        return render_template('clientes.html', clientes=lista_paginada,
-            page=page, total_pages=total_pages, total=total)
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -738,19 +474,6 @@ def clientes():
 @app.route('/cliente/<int:id>')
 @login_required
 def detalle_cliente(id):
-    if PREVIEW_MODE:
-        cliente = _buscar_cliente_mock(id)
-        if not cliente:
-            flash('Cliente no encontrado.', 'error')
-            return redirect(url_for('clientes'))
-
-        reps = sorted(
-            [r for r in mock_reparaciones if r['cliente_id'] == id],
-            key=lambda r: r['created_at'], reverse=True
-        )
-        gasto = sum(r['precio_final'] or 0 for r in reps)
-        return render_template('cliente.html', cliente=cliente, reparaciones=reps, gasto_total=gasto)
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -777,29 +500,6 @@ def detalle_cliente(id):
 @app.route('/cliente/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_cliente(id):
-    if PREVIEW_MODE:
-        cliente = _buscar_cliente_mock(id)
-        if not cliente:
-            flash('Cliente no encontrado.', 'error')
-            return redirect(url_for('clientes'))
-
-        if request.method == 'POST':
-            nombre = request.form.get('nombre', '').strip()
-            telefono = request.form.get('telefono', '').strip()
-            email = request.form.get('email', '').strip()
-
-            if not nombre:
-                flash('El nombre es obligatorio.', 'error')
-                return render_template('editar_cliente.html', cliente=cliente)
-
-            cliente['nombre'] = nombre
-            cliente['telefono'] = telefono
-            cliente['email'] = email
-            flash('Cliente actualizado correctamente.', 'success')
-            return redirect(url_for('detalle_cliente', id=id))
-
-        return render_template('editar_cliente.html', cliente=cliente)
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM clientes WHERE id = %s", (id,))
@@ -850,21 +550,6 @@ def api_buscar():
     if not q or len(q) < 2:
         return jsonify({'reparaciones': [], 'clientes': []})
 
-    if PREVIEW_MODE:
-        reps = [r for r in mock_reparaciones
-                if q.lower() in r['codigo'].lower()
-                or q.lower() in r['averia'].lower()]
-        _anadir_nombre_cliente(reps)
-
-        clientes = [c for c in mock_clientes
-                    if q.lower() in c['nombre'].lower()
-                    or q in c.get('telefono', '')]
-
-        return jsonify({
-            'reparaciones': reps[:10],
-            'clientes': clientes[:10]
-        })
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -895,10 +580,6 @@ def api_buscar_cliente():
     if not q or len(q) < 2:
         return jsonify([])
 
-    if PREVIEW_MODE:
-        resultados = [c for c in mock_clientes if q.lower() in c['nombre'].lower() or q in c.get('telefono', '')]
-        return jsonify(resultados[:5])
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
     cursor.execute("""
@@ -915,55 +596,34 @@ def api_buscar_cliente():
 @app.route('/pdf/<codigo>')
 @login_required
 def ver_pdf(codigo):
-    if PREVIEW_MODE:
-        rep = _buscar_rep_mock(codigo)
-        if not rep:
-            flash('Reparación no encontrada.', 'error')
-            return redirect(url_for('dashboard'))
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT r.*, c.nombre as nombre_cliente, c.telefono, c.email
+        FROM reparaciones r
+        JOIN clientes c ON r.cliente_id = c.id
+        WHERE r.codigo = %s
+    """, (codigo,))
+    row = cursor.fetchone()
+    cursor.close()
+    db.close()
 
-        cliente = _buscar_cliente_mock(rep['cliente_id'])
+    if not row:
+        flash('Reparación no encontrada.', 'error')
+        return redirect(url_for('dashboard'))
 
-        datos = {
-            'codigo': rep['codigo'],
-            'nombre_cliente': cliente['nombre'] if cliente else 'Desconocido',
-            'telefono': cliente.get('telefono', '') if cliente else '',
-            'email': cliente.get('email', '') if cliente else '',
-            'tipo_dispositivo': rep['tipo_dispositivo'],
-            'marca': rep.get('marca', ''),
-            'modelo': rep.get('modelo', ''),
-            'averia': rep['averia'],
-            'observaciones': rep.get('observaciones', ''),
-            'fecha': rep['created_at']
-        }
-    else:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT r.*, c.nombre as nombre_cliente, c.telefono, c.email
-            FROM reparaciones r
-            JOIN clientes c ON r.cliente_id = c.id
-            WHERE r.codigo = %s
-        """, (codigo,))
-        row = cursor.fetchone()
-        cursor.close()
-        db.close()
-
-        if not row:
-            flash('Reparación no encontrada.', 'error')
-            return redirect(url_for('dashboard'))
-
-        datos = {
-            'codigo': row['codigo'],
-            'nombre_cliente': row['nombre_cliente'],
-            'telefono': row.get('telefono', ''),
-            'email': row.get('email', ''),
-            'tipo_dispositivo': row['tipo_dispositivo'],
-            'marca': row.get('marca', ''),
-            'modelo': row.get('modelo', ''),
-            'averia': row['averia'],
-            'observaciones': row.get('observaciones', ''),
-            'fecha': row['created_at']
-        }
+    datos = {
+        'codigo': row['codigo'],
+        'nombre_cliente': row['nombre_cliente'],
+        'telefono': row.get('telefono', ''),
+        'email': row.get('email', ''),
+        'tipo_dispositivo': row['tipo_dispositivo'],
+        'marca': row.get('marca', ''),
+        'modelo': row.get('modelo', ''),
+        'averia': row['averia'],
+        'observaciones': row.get('observaciones', ''),
+        'fecha': row['created_at']
+    }
 
     pdf_dir = os.path.join(app.root_path, 'pdfs')
     os.makedirs(pdf_dir, exist_ok=True)
@@ -979,22 +639,19 @@ def ver_pdf(codigo):
 def exportar_csv():
     filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre, _, fecha_desde_str, fecha_hasta_str = _get_filtros_from_request()
 
-    if PREVIEW_MODE:
-        lista = _filtrar_reparaciones_mock(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre)
-    else:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-        where_sql, params = _construir_where_filtros(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre)
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    where_sql, params = _construir_where_filtros(filtro, fecha_desde, fecha_hasta, tipo_dispositivo, cliente_nombre)
 
-        cursor.execute(f"""
-            SELECT r.*, c.nombre as cliente_nombre
-            FROM reparaciones r JOIN clientes c ON r.cliente_id = c.id
-            {where_sql}
-            ORDER BY r.created_at DESC
-        """, params)
-        lista = cursor.fetchall()
-        cursor.close()
-        db.close()
+    cursor.execute(f"""
+        SELECT r.*, c.nombre as cliente_nombre
+        FROM reparaciones r JOIN clientes c ON r.cliente_id = c.id
+        {where_sql}
+        ORDER BY r.created_at DESC
+    """, params)
+    lista = cursor.fetchall()
+    cursor.close()
+    db.close()
 
     output = io.StringIO()
     output.write('﻿')  # BOM para que Excel detecte UTF-8
@@ -1027,10 +684,6 @@ def exportar_csv():
 @app.route('/admin')
 @admin_required
 def admin_panel():
-    if PREVIEW_MODE:
-        usuarios = mock_usuarios
-        return render_template('admin.html', usuarios=usuarios)
-
     db = get_db()
     cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id, nombre, email, rol, created_at FROM usuarios ORDER BY id")
@@ -1054,23 +707,6 @@ def crear_usuario():
 
     if rol not in ('admin', 'tecnico'):
         rol = 'tecnico'
-
-    if PREVIEW_MODE:
-        if any(u['email'] == email for u in mock_usuarios):
-            flash('Ya existe un usuario con ese email.', 'error')
-            return redirect(url_for('admin_panel'))
-
-        nuevo_id = max(u['id'] for u in mock_usuarios) + 1
-        mock_usuarios.append({
-            'id': nuevo_id,
-            'nombre': nombre,
-            'email': email,
-            'password_hash': generate_password_hash(password),
-            'rol': rol,
-            'created_at': datetime.now()
-        })
-        flash(f'Usuario "{nombre}" creado correctamente.', 'success')
-        return redirect(url_for('admin_panel'))
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -1098,15 +734,6 @@ def crear_usuario():
 def eliminar_usuario(id):
     if id == session.get('user_id'):
         flash('No puedes eliminar tu propio usuario.', 'error')
-        return redirect(url_for('admin_panel'))
-
-    if PREVIEW_MODE:
-        usuario = next((u for u in mock_usuarios if u['id'] == id), None)
-        if not usuario:
-            flash('Usuario no encontrado.', 'error')
-            return redirect(url_for('admin_panel'))
-        mock_usuarios.remove(usuario)
-        flash(f'Usuario "{usuario["nombre"]}" eliminado.', 'success')
         return redirect(url_for('admin_panel'))
 
     db = get_db()

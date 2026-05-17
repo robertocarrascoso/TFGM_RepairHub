@@ -1,15 +1,15 @@
 """seed.py — Insertar datos de prueba en la base de datos."""
+import sys
+import os
 import mysql.connector
 import random
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 
-conn = mysql.connector.connect(
-    host="localhost",
-    user="repairhub_user",
-    password="tu_contraseña",
-    database="repairhub"
-)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import DB_CONFIG
+
+conn = mysql.connector.connect(**DB_CONFIG)
 cursor = conn.cursor()
 
 TABLAS = ('historial_estados', 'reparaciones', 'clientes', 'usuarios')
